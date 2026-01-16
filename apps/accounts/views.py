@@ -5,12 +5,22 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from .serializers import OTPRequestSerializer, OTPVerifySerializer
+from .serializers import OTPRequestSerializer, OTPVerifySerializer, RegisterSerializer
 from .services import OTPService
 from .tasks import send_otp_email
 from apps.audit.tasks import create_audit_log
 from apps.audit.utils import get_request_meta
 
+User = get_user_model()
+
+
+class RegisterView(APIView):
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "User registered successfully"}, status=status.HTTP_201_CREATED)
 
 class OTPRequestView(APIView):
 
@@ -61,7 +71,6 @@ class OTPRequestView(APIView):
 
 
 
-User = get_user_model()
 
 class OTPVerifyView(APIView):
 
