@@ -1,6 +1,8 @@
 import random
 from django.core.cache import cache
 from datetime import timedelta
+from django.conf import settings
+import redis
 
 # Constants
 OTP_TTL = 300                # 5 minutes
@@ -8,11 +10,28 @@ EMAIL_RATE_LIMIT = (3, 600)  # 3 requests per 10 min
 IP_RATE_LIMIT = (10, 3600)   # 10 requests per 1 hr
 MAX_FAILED_ATTEMPTS = (5, 900)  # 5 attempts per 15 min
 
+r = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0)
+
 
 class OTPService:
+    
     @staticmethod
-    def generate_otp():
-        return f"{random.randint(100000, 999999)}"
+    def generate_otp(email):
+        otp = "{:06d}".format(random.randint(0, 999999))
+        r.setex(f"login_otp:{email}", 300, otp)  # 5 min TTL
+        return otp
+
+    @staticmethod
+    def verify_otp(email, otp):
+        key = f"login_otp:{email}"
+        stored = r.get(key)
+        if stored and stored.decode() == otp:
+            return True
+        return False
+
+    @staticmethod
+    def delete_otp(email):
+        r.delete(f"login_otp:{email}")
 
     @staticmethod
     def get_otp_key(email):

@@ -5,8 +5,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from .serializers import OTPRequestSerializer, OTPVerifySerializer, RegisterSerializer
-from .services import OTPService
+from .serializers import OTPRequestSerializer, OTPVerifySerializer, RegisterSerializer, LoginSerializer, ForgotPasswordSerializer, PasswordResetSerializer
+from .services.otp_services import OTPService
 from .tasks import send_otp_email
 from apps.audit.tasks import create_audit_log
 from apps.audit.utils import get_request_meta
@@ -21,6 +21,54 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"detail": "User registered successfully"}, status=status.HTTP_201_CREATED)
+
+
+class LoginView(APIView):
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        })
+    
+
+class ForgotPasswordView(APIView):
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+
+        otp = OTPService.generate_otp(email)
+        # enqueue Celery task to "send" OTP email
+        # e.g., send_email_otp.delay(email, otp)
+        return Response({"detail": "OTP sent to email", "expires_in": 300}, status=status.HTTP_202_ACCEPTED)
+
+class PasswordResetView(APIView):
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+        otp = serializer.validated_data["otp"]
+        password = serializer.validated_data["password"]
+
+        if not OTPService.verify_otp(email, otp):
+            return Response({"detail": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # update password
+        user = User.objects.get(email=email)
+        user.set_password(password)
+        user.save()
+
+        OTPService.delete_otp(email)
+
+        return Response({"detail": "Password reset successful"})
 
 class OTPRequestView(APIView):
 
