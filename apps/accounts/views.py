@@ -1,7 +1,10 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import OTPRequestSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from .serializers import OTPRequestSerializer, OTPVerifySerializer
 from .services import OTPService
 from .tasks import send_otp_email
 from apps.audit.tasks import create_audit_log
@@ -47,4 +50,63 @@ class OTPRequestView(APIView):
         return Response(
             {"detail": "OTP sent", "expires_in": 300},
             status=status.HTTP_202_ACCEPTED
+        )
+
+
+
+User = get_user_model()
+
+class OTPVerifyView(APIView):
+
+    def post(self, request):
+        serializer = OTPVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        otp_input = serializer.validated_data['otp']
+        meta = get_request_meta(request)
+
+        # Check lockout (failed attempts)
+        ok, retry = OTPService.check_failed_attempts(email)
+        if not ok:
+            create_audit_log.delay(event="OTP_LOCKED", email=email, request_meta=meta)
+            return Response(
+                {"detail": "Too many failed attempts, account locked", "unlock_in": retry},
+                status=status.HTTP_423_LOCKED
+            )
+
+        # Validate OTP
+        otp_stored = OTPService.get_otp(email)
+        if otp_stored != otp_input:
+            OTPService.increment_failed_attempts(email)
+            create_audit_log.delay(event="OTP_FAILED", email=email, request_meta=meta)
+            return Response(
+                {"detail": "Invalid OTP"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # OTP correct: one-time use
+        OTPService.delete_otp(email)
+        OTPService.reset_failed_attempts(email)
+
+        # Create or update user
+        user, created = User.objects.get_or_create(email=email)
+        if created:
+            user.set_unusable_password()  # OTP-only login
+            user.save()
+
+        # Issue JWT tokens
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+
+        # Audit success
+        create_audit_log.delay(event="OTP_VERIFIED", email=email, request_meta=meta)
+
+        return Response(
+            {
+                "access": access_token,
+                "refresh": str(refresh),
+                "detail": "OTP verified successfully",
+            },
+            status=status.HTTP_200_OK
         )
