@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from .serializers import OTPRequestSerializer, OTPVerifySerializer
@@ -12,6 +13,12 @@ from apps.audit.utils import get_request_meta
 
 
 class OTPRequestView(APIView):
+
+    @extend_schema(
+        request=OTPRequestSerializer,
+        responses={202: dict},
+        description="Request OTP for email authentication"
+    )
 
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
@@ -57,6 +64,12 @@ class OTPRequestView(APIView):
 User = get_user_model()
 
 class OTPVerifyView(APIView):
+
+    @extend_schema(
+        request=OTPVerifySerializer,
+        responses={200: dict},
+        description="Verify OTP and receive JWT tokens"
+    )
 
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
