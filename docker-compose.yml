@@ -9,9 +9,14 @@ services:
       - redis
     volumes:
       - .:/app
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
 
   redis:
     image: redis:7
+    ports:
+      - "6379:6379"
 
   celery:
     build: .

@@ -16,6 +16,11 @@ User = get_user_model()
 
 class RegisterView(APIView):
 
+    @extend_schema(
+        request=RegisterSerializer,
+        responses={201: {"description": "User registered successfully"}}
+    )
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -24,6 +29,12 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+
+    @extend_schema(
+        request=LoginSerializer,
+        responses={202: {"description": "OTP sent to email"}}
+    )
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -38,6 +49,10 @@ class LoginView(APIView):
 
 class ForgotPasswordView(APIView):
 
+    @extend_schema(
+        request=ForgotPasswordSerializer,
+        responses={200: {"description": "otp has been sent to email"}}
+    )
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -49,6 +64,11 @@ class ForgotPasswordView(APIView):
         return Response({"detail": "OTP sent to email", "expires_in": 300}, status=status.HTTP_202_ACCEPTED)
 
 class PasswordResetView(APIView):
+
+    @extend_schema(
+        request=PasswordResetSerializer,
+        responses={200: {"description": "Password reset successful"}}
+    )
 
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
@@ -100,7 +120,7 @@ class OTPRequestView(APIView):
             )
 
         # Generate OTP
-        otp = OTPService.generate_otp()
+        otp = OTPService.generate_otp(email=email)
         OTPService.store_otp(email, otp)
 
         # Increment counters
@@ -116,9 +136,6 @@ class OTPRequestView(APIView):
             {"detail": "OTP sent", "expires_in": 300},
             status=status.HTTP_202_ACCEPTED
         )
-
-
-
 
 class OTPVerifyView(APIView):
 
