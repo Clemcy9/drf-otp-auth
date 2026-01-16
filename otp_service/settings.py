@@ -149,3 +149,14 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Email OTP Authentication API',
     'VERSION': '1.0.0',
 }
+
+# redis related config
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/0",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
